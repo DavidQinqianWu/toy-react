@@ -1,4 +1,4 @@
-// 因为 babel 转义出来的jsx 是 第一位tagName, 第二为Attributes, 第三位是 children
+// 这里采用Symbol语法来起到private作用
 const RENDER_TO_DOM = Symbol("render_to_DOM");
 
 class ElementWrap {
@@ -6,6 +6,7 @@ class ElementWrap {
     this.root = document.createElement(type);
   }
   setAttribute(name, value) {
+    // 如果匹配 on 开头的任何字符, 那么直接就把这个转为小写的
     if (name.match(/^on([\s\S]+)$/)) {
       this.root.addEventListener(
         RegExp.$1.replace(/^[\s\S]/, (c) => c.toLowerCase()),
@@ -91,6 +92,8 @@ export class Component {
     this.rerender();
   }
 }
+
+// 因为 babel 转义出来的jsx 是 第一位tagName, 第二为Attributes, 第三位是 children
 export function createElement(type, attributes, ...children) {
   let e;
   if (typeof type === "string") {
@@ -125,6 +128,7 @@ export function createElement(type, attributes, ...children) {
 }
 
 export function render(component, parentElement) {
+  // 这里创建一个range
   let range = document.createRange();
   range.setStart(parentElement, 0);
   range.setEnd(parentElement, parentElement.childNodes.length);
