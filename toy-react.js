@@ -21,26 +21,26 @@ export class Component {
   }
 
   update() {
-    let isSameNote = (oldNote, newNode) => {
+    let isSameNode = (oldNode, newNode) => {
       // 类型不同
-      if (oldNote.type !== newNode.type) {
+      if (oldNode.type !== newNode.type) {
         return;
       }
       // 属性不同
-      for (let name in newNote.props) {
-        if (newNote.props[name] !== oldNote.props[name]) {
+      for (let name in newNode.props) {
+        if (newNode.props[name] !== oldNode.props[name]) {
           return false;
         }
       }
       // 属性的数量不同
       if (
-        Object.keys(oldNote.props).length !== Object.keys(newNote.props).length
+        Object.keys(oldNode.props).length !== Object.keys(newNode.props).length
       ) {
         return false;
       }
       // 文本节点内容不同
-      if (newNote.type === "#text") {
-        if (newNote.content !== oldNote.content) {
+      if (newNode.type === "#text") {
+        if (newNode.content !== oldNode.content) {
           return false;
         }
       }
@@ -52,13 +52,18 @@ export class Component {
       // 首先对比type类型, props 一样不一样
       // 看根结点
       // 在看子节点 #text, content
-      if (!isSameNote(oldNote, newNote)) {
-        newNote[RENDER_TO_DOM](oldNode._range);
+      if (!isSameNode(oldNode, newNode)) {
+        newNode[RENDER_TO_DOM](oldNode._range);
         return;
       }
       newNode._range = oldNode._range;
-      let newChildren = newNote.vchildren;
-      let oldChildren = oldNote.vchildren;
+      let newChildren = newNode.vchildren;
+      let oldChildren = oldNode.vchildren;
+
+      if(!newChildren || !newChildren.length){
+        return ;
+      }
+      let tailRange = oldChildren[oldChildren.length  -  1]._range;
 
       for (let i = 0; i < newChildren.length; i++) {
         let newChild = newChildren[i];
@@ -67,6 +72,11 @@ export class Component {
           update(oldChild, newChild);
         } else {
           // TODO
+          let range = document.createRange();
+          range.setStart(tailRange.endContainer, tailRange.endOffset);
+          range.setEnd(tailRange.endContainer, tailRange.endOffset);
+          newChild[RENDER_TO_DOM](range);
+          tailRange=range;
         }
       }
     };
@@ -75,17 +85,6 @@ export class Component {
     this._vdom = vdom;
   }
 
-  /*rerender() {
-    let oldRange = this._range;
-
-    let range = document.createRange();
-    range.setStart(oldRange.startContainer, oldRange.startOffset);
-    range.setEnd(oldRange.startContainer, oldRange.startOffset);
-    this[RENDER_TO_DOM](range);
-
-    oldRange.setStart(range.endContainer, range.endOffset);
-    oldRange.deleteContents();
-  }*/
   setState(newState) {
     if (this.state === null || typeof this.state !== "object") {
       this.state = newState;
@@ -119,7 +118,6 @@ class ElementWrap extends Component {
 
   [RENDER_TO_DOM](range) {
     this._range = range;
-    range.deleteContents();
     let root = document.createElement(this.type);
     for (let name in this.props) {
       let value = this.props[name];
@@ -146,17 +144,12 @@ class ElementWrap extends Component {
       childRange.setEnd(root, root.childNodes.length);
       child[RENDER_TO_DOM](childRange);
     }
-    range.insertNode(root);
+    replaceContent(range, root);
   }
 
   get vdom() {
     this.vchildren = this.children.map((child) => child.vdom);
     return this;
-    //  {
-    //   type: this.type,
-    //   props: this.props,
-    //   children: this.children.map((child) => child.vdom),
-    // };
   }
 }
 
@@ -165,12 +158,11 @@ class TextWrap extends Component {
     super(content);
     this.type = "#text";
     this.content = content;
-    this.root = document.createTextNode(content);
   }
   [RENDER_TO_DOM](range) {
     this._range = range;
-    range.deleteContents();
-    range.insertNode(this.root);
+    let root = document.createTextNode(this.content);
+    replaceContent(range, root);
   }
   get vdom() {
     return this;
@@ -219,4 +211,11 @@ export function render(component, parentElement) {
   component[RENDER_TO_DOM](range);
 }
 
-function replaceContent() {}
+function replaceContent(range, node) {
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.deleteContents();
+
+  range.setStartBefore(node);
+  range.setEndAfter(node);
+}
