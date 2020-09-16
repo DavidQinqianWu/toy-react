@@ -1,7 +1,9 @@
 // 这里采用Symbol语法来起到private作用
 const RENDER_TO_DOM = Symbol("render_to_DOM");
 
+// 所有自定义标签的 父类  
 export class Component {
+  // 初始化自定义标签, 自定义标签是没有 root的 ,所以是 null
   constructor() {
     this.props = Object.create(null);
     this.children = [];
@@ -60,10 +62,10 @@ export class Component {
       let newChildren = newNode.vchildren;
       let oldChildren = oldNode.vchildren;
 
-      if(!newChildren || !newChildren.length){
-        return ;
+      if (!newChildren || !newChildren.length) {
+        return;
       }
-      let tailRange = oldChildren[oldChildren.length  -  1]._range;
+      let tailRange = oldChildren[oldChildren.length - 1]._range;
 
       for (let i = 0; i < newChildren.length; i++) {
         let newChild = newChildren[i];
@@ -76,7 +78,7 @@ export class Component {
           range.setStart(tailRange.endContainer, tailRange.endOffset);
           range.setEnd(tailRange.endContainer, tailRange.endOffset);
           newChild[RENDER_TO_DOM](range);
-          tailRange=range;
+          tailRange = range;
         }
       }
     };
@@ -110,6 +112,7 @@ export class Component {
   }
 }
 
+// 对html标签的封装 
 class ElementWrap extends Component {
   constructor(type) {
     super(type);
@@ -153,6 +156,7 @@ class ElementWrap extends Component {
   }
 }
 
+// 对文本节点的封装
 class TextWrap extends Component {
   constructor(content) {
     super(content);
@@ -175,20 +179,25 @@ export function createElement(type, attributes, ...children) {
     // 说明这个是一个 h5 标签的tag
     e = new ElementWrap(type);
   } else {
+    // babel 转译出来的 返回一个自定义标签的class 调用构造函数
     e = new type();
   }
+  // for in 循环每一个属性, 调用实例对象重的setAttribute 方法
   for (let i in attributes) {
     e.setAttribute(i, attributes[i]);
   }
-
+  // 插入子节点, 因为children是数组形式
   let insertChildren = (children) => {
     for (const child of children) {
+      // 如果子节点是文字 就生成文字对象
       if (typeof child === "string") {
         child = new TextWrap(child);
       }
+      // 如果没有就跳过
       if (child === null) {
         continue;
       }
+      // 如果子节点是是多个的话
       if (typeof child === "object" && child instanceof Array) {
         insertChildren(child);
       } else {
@@ -219,3 +228,18 @@ function replaceContent(range, node) {
   range.setStartBefore(node);
   range.setEndAfter(node);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
