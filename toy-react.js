@@ -1,48 +1,6 @@
 // 这里采用Symbol语法来起到private作用
 const RENDER_TO_DOM = Symbol("render_to_DOM");
 
-class ElementWrap {
-  constructor(type) {
-    this.root = document.createElement(type);
-  }
-  setAttribute(name, value) {
-    // 如果匹配 on 开头的任何字符, 那么直接就把这个转为小写的
-    if (name.match(/^on([\s\S]+)$/)) {
-      this.root.addEventListener(
-        RegExp.$1.replace(/^[\s\S]/, (c) => c.toLowerCase()),
-        value
-      );
-    } else {
-      if (name === "className") {
-        this.root.setAttribute("class", value);
-      } else {
-        this.root.setAttribute(name, value);
-      }
-    }
-    this.root.setAttribute(name, value);
-  }
-  appendChild(component) {
-    let range = document.createRange();
-    range.setStart(this.root, this.root.childNodes.length);
-    range.setEnd(this.root, this.root.childNodes.length);
-    component[RENDER_TO_DOM](range);
-  }
-  [RENDER_TO_DOM](range) {
-    range.deleteContents();
-    range.insertNode(this.root);
-  }
-}
-
-class TextWrap {
-  constructor(content) {
-    this.root = document.createTextNode(content);
-  }
-  [RENDER_TO_DOM](range) {
-    range.deleteContents();
-    range.insertNode(this.root);
-  }
-}
-
 export class Component {
   constructor() {
     this.props = Object.create(null);
@@ -58,10 +16,66 @@ export class Component {
 
   [RENDER_TO_DOM](range) {
     this._range = range;
-    this.render()[RENDER_TO_DOM](range);
+    this._vdom = this.vdom;
+    this._vdom[RENDER_TO_DOM](range);
   }
 
-  rerender() {
+  update() {
+    let isSameNote = (oldNote, newNode) => {
+      // 类型不同
+      if (oldNote.type !== newNode.type) {
+        return;
+      }
+      // 属性不同
+      for (let name in newNote.props) {
+        if (newNote.props[name] !== oldNote.props[name]) {
+          return false;
+        }
+      }
+      // 属性的数量不同
+      if (
+        Object.keys(oldNote.props).length !== Object.keys(newNote.props).length
+      ) {
+        return false;
+      }
+      // 文本节点内容不同
+      if (newNote.type === "#text") {
+        if (newNote.content !== oldNote.content) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    let update = (oldNode, newNode) => {
+      // 首先对比type类型, props 一样不一样
+      // 看根结点
+      // 在看子节点 #text, content
+      if (!isSameNote(oldNote, newNote)) {
+        newNote[RENDER_TO_DOM](oldNode._range);
+        return;
+      }
+      newNode._range = oldNode._range;
+      let newChildren = newNote.vchildren;
+      let oldChildren = oldNote.vchildren;
+
+      for (let i = 0; i < newChildren.length; i++) {
+        let newChild = newChildren[i];
+        let oldChild = oldChildren[i];
+        if (i < oldChildren.length) {
+          update(oldChild, newChild);
+        } else {
+          // TODO
+        }
+      }
+    };
+    let vdom = this.vdom;
+    update(this._vdom, vdom);
+    this._vdom = vdom;
+  }
+
+  /*rerender() {
     let oldRange = this._range;
 
     let range = document.createRange();
@@ -71,11 +85,11 @@ export class Component {
 
     oldRange.setStart(range.endContainer, range.endOffset);
     oldRange.deleteContents();
-  }
+  }*/
   setState(newState) {
     if (this.state === null || typeof this.state !== "object") {
       this.state = newState;
-      this.rerender();
+      this.update();
       return;
     }
     // setState 假设已经存在了state
@@ -89,10 +103,79 @@ export class Component {
       }
     };
     merge(this.state, newState);
-    this.rerender();
+    this.update();
+  }
+
+  get vdom() {
+    return this.render().vdom;
   }
 }
 
+class ElementWrap extends Component {
+  constructor(type) {
+    super(type);
+    this.type = type;
+  }
+
+  [RENDER_TO_DOM](range) {
+    this._range = range;
+    range.deleteContents();
+    let root = document.createElement(this.type);
+    for (let name in this.props) {
+      let value = this.props[name];
+      // 如果匹配 on 开头的任何字符, 那么直接就把这个转为小写的
+      if (name.match(/^on([\s\S]+)$/)) {
+        root.addEventListener(
+          RegExp.$1.replace(/^[\s\S]/, (c) => c.toLowerCase()),
+          value
+        );
+      } else {
+        if (name === "className") {
+          root.setAttribute("class", value);
+        } else {
+          root.setAttribute(name, value);
+        }
+      }
+      root.setAttribute(name, value);
+    }
+    if (this.vchildren)
+      this.vchildren = this.children.map((child) => child.vdom);
+    for (let child of this.vchildren) {
+      let childRange = document.createRange();
+      childRange.setStart(root, root.childNodes.length);
+      childRange.setEnd(root, root.childNodes.length);
+      child[RENDER_TO_DOM](childRange);
+    }
+    range.insertNode(root);
+  }
+
+  get vdom() {
+    this.vchildren = this.children.map((child) => child.vdom);
+    return this;
+    //  {
+    //   type: this.type,
+    //   props: this.props,
+    //   children: this.children.map((child) => child.vdom),
+    // };
+  }
+}
+
+class TextWrap extends Component {
+  constructor(content) {
+    super(content);
+    this.type = "#text";
+    this.content = content;
+    this.root = document.createTextNode(content);
+  }
+  [RENDER_TO_DOM](range) {
+    this._range = range;
+    range.deleteContents();
+    range.insertNode(this.root);
+  }
+  get vdom() {
+    return this;
+  }
+}
 // 因为 babel 转义出来的jsx 是 第一位tagName, 第二为Attributes, 第三位是 children
 export function createElement(type, attributes, ...children) {
   let e;
@@ -135,3 +218,5 @@ export function render(component, parentElement) {
   range.deleteContents();
   component[RENDER_TO_DOM](range);
 }
+
+function replaceContent() {}
